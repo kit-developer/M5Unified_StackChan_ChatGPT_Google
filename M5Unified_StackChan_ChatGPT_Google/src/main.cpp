@@ -16,7 +16,9 @@
 #include "AudioOutputM5Speaker.h"
 #include <AudioFileSourcePROGMEM.h>
 #include <google-tts.h>
-#include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
+#include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing  
+
+#include "ServoManager.h"
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -63,6 +65,8 @@ std::deque<String> chatHistory;
 TTS tts;
 HTTPClient http;
 WiFiClient client;
+
+ServoManager* servo_manager = new ServoManager();
 
 /// set M5Speaker virtual channel (0-7)
 static constexpr uint8_t m5spk_virtual_channel = 0;
@@ -657,57 +661,57 @@ void lipSync(void *args)
   }
 }
 
-bool servo_home = false;
+// bool servo_home = false;
 
-void servo(void *args)
-{
-  float gazeX, gazeY;
-  DriveContext *ctx = (DriveContext *)args;
-  Avatar *avatar = ctx->getAvatar();
-  for (;;)
-  {
-#ifdef USE_SERVO
-    if(!servo_home)
-    {
-    avatar->getGaze(&gazeY, &gazeX);
-    servo_x.setEaseTo(START_DEGREE_VALUE_X + (int)(15.0 * gazeX));
-    if(gazeY < 0) {
-      int tmp = (int)(10.0 * gazeY);
-      if(tmp > 10) tmp = 10;
-      servo_y.setEaseTo(START_DEGREE_VALUE_Y + tmp);
-    } else {
-      servo_y.setEaseTo(START_DEGREE_VALUE_Y + (int)(10.0 * gazeY));
-    }
-    } else {
-//     avatar->setRotation(gazeX * 5);
-//     float b = avatar->getBreath();
-       servo_x.setEaseTo(START_DEGREE_VALUE_X); 
-//     servo_y.setEaseTo(START_DEGREE_VALUE_Y + b * 5);
-       servo_y.setEaseTo(START_DEGREE_VALUE_Y);
-    }
-    synchronizeAllServosStartAndWaitForAllServosToStop();
-#endif
-    delay(50);
-  }
-}
+// void servo(void *args)
+// {
+//   float gazeX, gazeY;
+//   DriveContext *ctx = (DriveContext *)args;
+//   Avatar *avatar = ctx->getAvatar();
+//   for (;;)
+//   {
+// #ifdef USE_SERVO
+//     if(!servo_home)
+//     {
+//     avatar->getGaze(&gazeY, &gazeX);
+//     servo_x.setEaseTo(START_DEGREE_VALUE_X + (int)(15.0 * gazeX));
+//     if(gazeY < 0) {
+//       int tmp = (int)(10.0 * gazeY);
+//       if(tmp > 10) tmp = 10;
+//       servo_y.setEaseTo(START_DEGREE_VALUE_Y + tmp);
+//     } else {
+//       servo_y.setEaseTo(START_DEGREE_VALUE_Y + (int)(10.0 * gazeY));
+//     }
+//     } else {
+// //     avatar->setRotation(gazeX * 5);
+// //     float b = avatar->getBreath();
+//        servo_x.setEaseTo(START_DEGREE_VALUE_X); 
+// //     servo_y.setEaseTo(START_DEGREE_VALUE_Y + b * 5);
+//        servo_y.setEaseTo(START_DEGREE_VALUE_Y);
+//     }
+//     synchronizeAllServosStartAndWaitForAllServosToStop();
+// #endif
+//     delay(50);
+//   }
+// }
 
-void Servo_setup() {
-#ifdef USE_SERVO
-  if (servo_x.attach(SERVO_PIN_X, START_DEGREE_VALUE_X, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
-    Serial.print("Error attaching servo x");
-  }
-  if (servo_y.attach(SERVO_PIN_Y, START_DEGREE_VALUE_Y, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
-    Serial.print("Error attaching servo y");
-  }
-  servo_x.setEasingType(EASE_QUADRATIC_IN_OUT);
-  servo_y.setEasingType(EASE_QUADRATIC_IN_OUT);
-  setSpeedForAllServos(30);
+// void Servo_setup() {
+// #ifdef USE_SERVO
+//   if (servo_x.attach(SERVO_PIN_X, START_DEGREE_VALUE_X, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
+//     Serial.print("Error attaching servo x");
+//   }
+//   if (servo_y.attach(SERVO_PIN_Y, START_DEGREE_VALUE_Y, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
+//     Serial.print("Error attaching servo y");
+//   }
+//   servo_x.setEasingType(EASE_QUADRATIC_IN_OUT);
+//   servo_y.setEasingType(EASE_QUADRATIC_IN_OUT);
+//   setSpeedForAllServos(30);
 
-  servo_x.setEaseTo(START_DEGREE_VALUE_X); 
-  servo_y.setEaseTo(START_DEGREE_VALUE_Y);
-  synchronizeAllServosStartAndWaitForAllServosToStop();
-#endif
-}
+//   servo_x.setEaseTo(START_DEGREE_VALUE_X); 
+//   servo_y.setEaseTo(START_DEGREE_VALUE_Y);
+//   synchronizeAllServosStartAndWaitForAllServosToStop();
+// #endif
+// }
 
 void google_tts(char *text, char *lang) {
   Serial.println("tts Start");
@@ -868,7 +872,7 @@ void setup()
   }
   M5.Speaker.begin();
 
-  Servo_setup();
+  servo_manager->Servo_setup();
   M5.Lcd.setTextSize(2);
   Serial.println("Connecting to WiFi");
   WiFi.disconnect();
@@ -1068,7 +1072,9 @@ void setup()
   avatar.init();
 #endif
   avatar.addTask(lipSync, "lipSync");
-  avatar.addTask(servo, "servo");
+  // TaskFunction_t task_f = ServoManager::Servo_run;
+  TaskFunction_t task_f = servo_manager.Servo_run;
+  avatar.addTask(task_f, "servo");
   avatar.setSpeechFont(&fonts::efontJA_16);
   box_servo.setupBox(80, 120, 80, 80);
   box_stt.setupBox(0, 0, M5.Display.width(), 60);
@@ -1234,11 +1240,11 @@ void loop()
       {
         M5.Speaker.tone(1000, 100);
         delay(200);
-        bool prev_servo_home = servo_home;
+        bool prev_servo_home = servo_manager->servo_home;
         random_speak = true;
         random_time = -1;
 #ifdef USE_SERVO
-        servo_home = true;
+        servo_manager->servo_home = true;
 #endif
         avatar.setExpression(Expression::Happy);
         if(LANG_CODE == "ja-JP") {
@@ -1263,7 +1269,7 @@ void loop()
         delete audio;
         delay(500);
 #ifdef USE_SERVO
-        servo_home = prev_servo_home;
+        servo_manager->servo_home = prev_servo_home;
 #endif
         Serial.println("音声認識終了");
         Serial.println("音声認識結果");
@@ -1290,7 +1296,7 @@ void loop()
 #ifdef USE_SERVO
       if (box_servo.contain(t.x, t.y))
       {
-        servo_home = !servo_home;
+        servo_manager->servo_home = !servo_manager->servo_home;
         M5.Speaker.tone(1000, 100);
       }
 #endif
