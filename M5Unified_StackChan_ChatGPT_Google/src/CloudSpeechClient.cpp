@@ -28,23 +28,57 @@ void CloudSpeechClient::PrintHttpBody2(Audio* audio) {
 //  Serial.printf("PrintHttpBody2=%d",len);
 }
 
-String CloudSpeechClient::Transcribe(Audio* audio) {
-  String HttpBody1 = "{\"config\":{\"encoding\":\"LINEAR16\",\"sampleRateHertz\":16000,\"languageCode\":\""+LANG_CODE+"\"},\"audio\":{\"content\":\"";
+String CloudSpeechClient::Transcribe(Audio* audio, String api_key) {
+  String HttpBody1 = "{\
+                        \"config\":\
+                        {\
+                          \"encoding\":\"LINEAR16\",\
+                          \"sampleRateHertz\":16000,\
+                          \"languageCode\":\""+LANG_CODE+"\"\
+                        },\
+                        \"audio\":\
+                        {\
+                          \"content\":\"";
   String HttpBody3 = "\"}}\r\n\r\n";
   int httpBody2Length = (audio->wavDataSize + sizeof(audio->paddedHeader))*4/3;  // 4/3 is from base64 encoding
   String ContentLength = String(HttpBody1.length() + httpBody2Length + HttpBody3.length());
 //  Serial.printf("HttpBody1=%d httpBody2Length=%d HttpBody3=%d \n",HttpBody1.length(),httpBody2Length,HttpBody3.length());
+  
+  Serial.println("ヘッダ準備");
   String HttpHeader;
   if (authentication == USE_APIKEY) 
-    HttpHeader = String("POST /v1/speech:recognize?key=") + GOOGLE_API_KEY
-    + String(" HTTP/1.1\r\nHost: speech.googleapis.com\r\nContent-Type: application/json\r\nContent-Length: ") + ContentLength + String("\r\n\r\n");
-  else if (authentication == USE_ACCESSTOKEN)
-    HttpHeader = String("POST /v1/speech:recognize HTTP/1.1\r\nHost: speech.googleapis.com\r\nContent-Type: application/json\r\nAuthorization: Bearer ")
-    + AccessToken + String("\r\nContent-Length: ") + ContentLength + String("\r\n\r\n");
+    // HttpHeader = String("POST speech/recognition/conversation/cognitiveservices/v1?language=ja-JP&format=detailed HTTP/1.1\r\n\
+    // Accept: application/json;text/xml\r\n\
+    // Content-Type: audio/wav; codecs=audio/pcm; samplerate=16000\r\n\
+    // Ocp-Apim-Subscription-Key: ") + api_key + String("\r\n\
+    // Host: westus.stt.speech.microsoft.com\r\n\
+    // Transfer-Encoding: chunked\r\n\
+    // Expect: 100-continue\r\n\
+    // Content-Length: ")
+    // + ContentLength + String("\r\n\r\n");
+    HttpHeader = String("POST speech/recognition/conversation/cognitiveservices/v1?language=ja-JP&format=detailed HTTP/1.1\r\nAccept: application/json;text/xml\r\nContent-Type: audio/wav; codecs=audio/pcm; samplerate=16000\r\nOcp-Apim-Subscription-Key: ") + api_key
+    + String("\r\nHost: westus.stt.speech.microsoft.com\r\nTransfer-Encoding: chunked\r\nExpect: 100-continue\r\nContent-Length: ")
+    + ContentLength + String("\r\n\r\n");
+    // HttpHeader = String("POST /v1/speech:recognize?key=") + api_key
+    // + String(" HTTP/1.1\r\nHost: speech.googleapis.com\r\nContent-Type: application/json\r\nContent-Length: ")
+    // + ContentLength + String("\r\n\r\n");
+  // else if (authentication == USE_ACCESSTOKEN)
+  //   HttpHeader = String("POST /v1/speech:recognize HTTP/1.1\r\n\
+  //   Host: speech.googleapis.com\r\n\
+  //   Content-Type: application/json\r\n\
+  //   Authorization: Bearer ")
+  //   + AccessToken + String("\r\nContent-Length: ") + ContentLength + String("\r\n\r\n");
+  
+  Serial.println("HttpHeader");
   client.print(HttpHeader); //Serial.print(HttpHeader);
+  Serial.println("HttpBody1");
   client.print(HttpBody1); //Serial.print(HttpBody1);
+  Serial.println("audio");
   PrintHttpBody2(audio);
+  Serial.println("HttpBody3");
   client.print(HttpBody3); //Serial.print(HttpBody3);
+  
+  Serial.println("client.available");
   while (!client.available());
   // Skip HTTP headers
   char endOfHeaders[] = "\r\n\r\n";
@@ -52,13 +86,16 @@ String CloudSpeechClient::Transcribe(Audio* audio) {
     Serial.println(F("Invalid response"));
     return String("");
   }
+  Serial.println("client.read");
   if(client.available())client.read();
   if(client.available())client.read();
   if(client.available())client.read();
 
+  Serial.println("jsonBuffer準備");
+
   // Parse JSON object
   StaticJsonDocument<500> jsonBuffer;
-  DeserializationError error = deserializeJson(jsonBuffer,client);
+  DeserializationError error = deserializeJson(jsonBuffer, client);
 //root.prettyPrintTo(Serial); //Serial.println("");
   String result = "";
   if (error) {

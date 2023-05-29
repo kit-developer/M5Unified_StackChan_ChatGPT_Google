@@ -194,7 +194,6 @@ static const char ROLE_HTML[] PROGMEM = R"KEWL(
 String speech_text = "";
 String speech_text_buffer = "";
 const int capacity = JSON_OBJECT_SIZE(2);
-StaticJsonDocument<capacity> json_request;
 //DynamicJsonDocument chat_doc(1024);
 DynamicJsonDocument chat_doc(1024*10);
 String json_ChatString = "{\"model\": \"gpt-3.5-turbo\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
@@ -800,21 +799,28 @@ void azure_tts(char *text, char *lang) {
   Serial.println(endpoint);
 
   http.begin(client, endpoint);
-  http.addHeader("Ocp-Apim-Subscription-Key", "");
+  http.addHeader("Ocp-Apim-Subscription-Key", AZURE_API_KEY);
   http.addHeader("Content-Type", "application/ssml+xml");
   http.addHeader("X-Microsoft-OutputFormat", "audio-16khz-128kbitrate-mono-mp3");
 
-  json_request["data-raw"] = "<speak version='1.0' xml:lang='ja-JP'>\
-                <voice xml:lang='ja-JP' xml:gender='Female' name='ja-JP-ChristopherNeural'>\
-                  Microsoft Speech Service Text-to-Speech API \
-                </voice>\
-              </speak>";
-  
-  char json_str[255];
-  serializeJson(json_request, json_str, sizeof(json_str));
+  // StaticJsonDocument<capacity> json_request;
+  // json_request["data-raw"] = "<speak version='1.0' xml:lang='ja-JP'>\
+  //               <voice xml:lang='ja-JP' xml:gender='Female' name='ja-JP-ChristopherNeural'>\
+  //                 Microsoft Speech Service Text-to-Speech API \
+  //               </voice>\
+  //             </speak>";
+  // char json_str[255];
+  // serializeJson(json_request, json_str, sizeof(json_str));
+  // http.setReuse(true);
+  // int code = http.POST((uint8_t*)json_str, strlen(json_str));
 
+  String body = "<speak version='1.0' xml:lang='ja-JP'>\
+                  <voice xml:lang='ja-JP' xml:gender='Female' name='ja-JP-ChristopherNeural'>\
+                    Microsoft Speech Service Text-to-Speech API \
+                  </voice>\
+                </speak>";
   http.setReuse(true);
-  int code = http.POST((uint8_t*)json_str, strlen(json_str));
+  int code = http.POST(body);
 
   if (code != HTTP_CODE_OK) {
     http.end();
@@ -1419,9 +1425,29 @@ void loop()
         }else{
           avatar.setSpeechText("I understand.");
         }
+
         CloudSpeechClient* cloudSpeechClient = new CloudSpeechClient(USE_APIKEY);
-        String ret = cloudSpeechClient->Transcribe(audio);
+        Serial.println("オブジェクト生成完了");
+        String ret = cloudSpeechClient->Transcribe(audio, AZURE_API_KEY);
         delete cloudSpeechClient;
+
+        Serial.println("認識終了");
+        
+        // String endpoint = "http://japaneast.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=ja-JP";
+        // http.begin(client, endpoint);
+        // http.addHeader("Ocp-Apim-Subscription-Key", AZURE_API_KEY);
+        // http.addHeader("Accept", "application/json");
+
+        // String body = "";
+        // http.setReuse(true);
+        // int code = http.POST(body);
+
+        // // if (code != HTTP_CODE_OK) {
+        // //   http.end();
+        // // }
+        // String ret = http.getString();
+        // Serial.println(ret);
+
         delete audio;
         delay(500);
 
