@@ -80,7 +80,8 @@ const Expression expressions_table[] = {
 ESP32WebServer server(80);
 
 String OPENAI_API_KEY = "";
-extern String GOOGLE_API_KEY;
+// extern String GOOGLE_API_KEY;
+String AZURE_API_KEY = "";
 
 char* text1 = "みなさんこんにちは、私の名前はスタックチャンです、よろしくね。";
 char* text2 = "Hello everyone, my name is Stack Chan, nice to meet you.";
@@ -107,8 +108,8 @@ static const char APIKEY_HTML[] PROGMEM = R"KEWL(
     <form>
       <label for="role1">OpenAI API Key</label>
       <input type="text" id="openai" name="openai" oninput="adjustSize(this)"><br>
-      <label for="role2">Google API Key</label>
-      <input type="text" id="google" name="google" oninput="adjustSize(this)"><br>
+      <label for="role2">AZURE API Key</label>
+      <input type="text" id="azure" name="azure" oninput="adjustSize(this)"><br>
       <button type="button" onclick="sendData()">Submit</button>
     </form>
     <script>
@@ -123,8 +124,8 @@ static const char APIKEY_HTML[] PROGMEM = R"KEWL(
         const openaiValue = document.getElementById("openai").value;
         if (openaiValue !== "") formData.append("openai", openaiValue);
 
-        const googleValue = document.getElementById("google").value;
-        if (googleValue !== "") formData.append("google", googleValue);
+        const azureValue = document.getElementById("azure").value;
+        if (azureValue !== "") formData.append("azure", azureValue);
 
 	    // POSTリクエストを送信
 	    const xhr = new XMLHttpRequest();
@@ -192,6 +193,8 @@ static const char ROLE_HTML[] PROGMEM = R"KEWL(
 </html>)KEWL";
 String speech_text = "";
 String speech_text_buffer = "";
+const int capacity = JSON_OBJECT_SIZE(2);
+StaticJsonDocument<capacity> json_request;
 //DynamicJsonDocument chat_doc(1024);
 DynamicJsonDocument chat_doc(1024*10);
 String json_ChatString = "{\"model\": \"gpt-3.5-turbo\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
@@ -231,6 +234,8 @@ void handleNotFound(){
 
 //void VoiceText_tts(char *text,char *tts_parms) ;
 void google_tts(char *text, char *lang);
+void azure_tts(char *text, char *lang);
+
 void handle_speech() {
   String message = server.arg("say");
   String expression = server.arg("expression");
@@ -247,7 +252,7 @@ void handle_speech() {
   // 音声の発声
   ////////////////////////////////////////
   avatar.setExpression(expressions_table[expr]);
-  google_tts((char*)message.c_str(),(char*)LANG_CODE.c_str());
+  azure_tts((char*)message.c_str(),(char*)LANG_CODE.c_str());
 //  avatar.setExpression(expressions_table[0]);
   server.send(200, "text/plain", String("OK"));
 }
@@ -429,13 +434,17 @@ void handle_apikey_set() {
   // openai
   String openai = server.arg("openai");
   // voicetxt
-   String google = server.arg("google");
+  // String google = server.arg("google");
+
+  String azure = server.arg("azure");
  
   OPENAI_API_KEY = openai;
   // tts_user = voicetext;
-  GOOGLE_API_KEY = google;
+  // GOOGLE_API_KEY = google;
+  AZURE_API_KEY = azure;
   Serial.println(openai);
-   Serial.println(google);
+  // Serial.println(google);
+  Serial.println(azure);
 
   uint32_t nvs_handle;
   if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
@@ -709,6 +718,47 @@ void Servo_setup() {
 #endif
 }
 
+int download_mp3(WiFiClient *ttsclient) {
+
+  int i = 0;
+  int len = sizeof(mp3buff);
+  int count = 0;
+
+  bool data_end = false;
+  while (!data_end) {
+    if(ttsclient->available() > 0) {
+
+      int bytesread = ttsclient->read(&mp3buff[i], len);
+  //     Serial.printf("%d Bytes Read\n",bytesread);
+      i = i + bytesread;
+      if(i > sizeof(mp3buff))
+      {
+        break;
+      } else {
+        len = len - bytesread;
+        if(len <= 0) break;
+      }
+
+    }
+    {
+      Serial.printf(" %d Bytes Read\n",i);
+      int lastms = millis();
+      data_end = true;
+      while (millis()-lastms < 600) { //データ終わりか待ってみる
+        if (ttsclient->available() > 0) {data_end = false; break;}
+          yield();
+      }
+    }
+
+  }
+
+  Serial.printf("Total %d Bytes Read\n",i);
+  ttsclient->stop();
+  http.end();
+
+  return i;
+}
+
 void google_tts(char *text, char *lang) {
   Serial.println("tts Start");
   String link =  "http" + tts.getSpeechUrl(text, lang).substring(5);
@@ -723,46 +773,64 @@ void google_tts(char *text, char *lang) {
     return ;
   }
   WiFiClient *ttsclient = http.getStreamPtr();
+
   ttsclient->setTimeout( 10000 ); 
   if (ttsclient->available() > 0) {
-    int i = 0;
-    int len = sizeof(mp3buff);
-    int count = 0;
 
-    bool data_end = false;
-    while (!data_end) {
-      if(ttsclient->available() > 0) {
-
-      int bytesread = ttsclient->read(&mp3buff[i], len);
-//     Serial.printf("%d Bytes Read\n",bytesread);
-      i = i + bytesread;
-      if(i > sizeof(mp3buff))
-      {
-        break;
-      } else {
-        len = len - bytesread;
-        if(len <= 0) break;
-      }
-
-      }
-      {
-        Serial.printf(" %d Bytes Read\n",i);
-        int lastms = millis();
-        data_end = true;
-        while (millis()-lastms < 600) { //データ終わりか待ってみる
-          if (ttsclient->available() > 0) {data_end = false; break;}
-           yield();
-        }
-      }
-
-    }
-
-    Serial.printf("Total %d Bytes Read\n",i);
-    ttsclient->stop();
-    http.end();
+    int i = download_mp3(ttsclient);
     file = new AudioFileSourcePROGMEM(mp3buff, i);
     mp3->begin(file, &out);
   }
+}
+
+void azure_tts(char *text, char *lang) {
+// curl --location --request POST "https://${SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1" \
+// --header "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
+// --header 'Content-Type: application/ssml+xml' \
+// --header 'X-Microsoft-OutputFormat: audio-16khz-128kbitrate-mono-mp3' \
+// --header 'User-Agent: curl' \
+// --data-raw '<speak version='\''1.0'\'' xml:lang='\''en-US'\''>
+//     <voice xml:lang='\''en-US'\'' xml:gender='\''Female'\'' name='\''en-US-JennyNeural'\''>
+//         my voice is my passport verify me
+//     </voice>
+// </speak>' > output.mp3
+
+  Serial.println("tts Start");
+  String endpoint = "http://japaneast.tts.speech.microsoft.com/cognitiveservices/v1";
+  Serial.println(endpoint);
+
+  http.begin(client, endpoint);
+  http.addHeader("Ocp-Apim-Subscription-Key", "");
+  http.addHeader("Content-Type", "application/ssml+xml");
+  http.addHeader("X-Microsoft-OutputFormat", "audio-16khz-128kbitrate-mono-mp3");
+
+  json_request["data-raw"] = "<speak version='1.0' xml:lang='ja-JP'>\
+                <voice xml:lang='ja-JP' xml:gender='Female' name='ja-JP-ChristopherNeural'>\
+                  Microsoft Speech Service Text-to-Speech API \
+                </voice>\
+              </speak>";
+  
+  char json_str[255];
+  serializeJson(json_request, json_str, sizeof(json_str));
+
+  http.setReuse(true);
+  int code = http.POST((uint8_t*)json_str, strlen(json_str));
+
+  if (code != HTTP_CODE_OK) {
+    http.end();
+//    cb.st(STATUS_HTTPFAIL, PSTR("Can't open HTTP request"));
+    return ;
+  }
+  WiFiClient *ttsclient = http.getStreamPtr();
+
+  ttsclient->setTimeout( 10000 ); 
+  if (ttsclient->available() > 0) {
+
+    int i = download_mp3(ttsclient);
+    file = new AudioFileSourcePROGMEM(mp3buff, i);
+    mp3->begin(file, &out);
+  }
+
 }
 
 struct box_t
@@ -848,6 +916,103 @@ void Wifi_setup() {
 //   Serial.println(fs_info.totalBytes - fs_info.usedBytes);
 // }
 
+void read_sd_txt() {
+
+  /// wifi
+  auto fs = SD.open("/wifi.txt", FILE_READ);
+  if(fs) {
+    size_t sz = fs.size();
+    char buf[sz + 1];
+    fs.read((uint8_t*)buf, sz);
+    buf[sz] = 0;
+    fs.close();
+
+    int y = 0;
+    for(int x = 0; x < sz; x++) {
+      if(buf[x] == 0x0a || buf[x] == 0x0d)
+        buf[x] = 0;
+      else if (!y && x > 0 && !buf[x - 1] && buf[x])
+        y = x;
+    }
+    WiFi.begin(buf, &buf[y]);
+  } else {
+      WiFi.begin();
+  }
+
+  // api key
+  uint32_t nvs_handle;
+  if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
+    /// radiko-premium
+    fs = SD.open("/apikey.txt", FILE_READ);
+    if(fs) {
+      size_t sz = fs.size();
+      char buf[sz + 1];
+      fs.read((uint8_t*)buf, sz);
+      buf[sz] = 0;
+      fs.close();
+      int y = 0;
+      for(int x = 0; x < sz; x++) {
+        if(buf[x] == 0x0a || buf[x] == 0x0d)  // 改行
+          buf[x] = 0;
+        else if (!y && x > 0 && !buf[x - 1] && buf[x])
+          y = x;
+      }
+      nvs_set_str(nvs_handle, "openai", buf);
+      nvs_set_str(nvs_handle, "azure", &buf[y]);
+      Serial.println(buf);
+      Serial.println(&buf[y]);
+    }
+    
+    nvs_close(nvs_handle);
+  }
+  SD.end();
+}
+
+void read_sd_json() {
+
+  /// wifi
+  auto fs = SD.open("/wifi.json", FILE_READ);
+  if(fs) {
+    size_t sz = fs.size();
+    char buf[sz + 1];
+    fs.read((uint8_t*)buf, sz);
+    buf[sz] = 0;
+    fs.close();
+    StaticJsonDocument<64> wifi_json;
+    deserializeJson(wifi_json, buf);
+    const char* ssid = wifi_json["SSID"];
+    const char* pass = wifi_json["PASS"];
+    WiFi.begin(ssid, pass);
+  }
+
+  // api key
+  uint32_t nvs_handle;
+  if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
+    /// radiko-premium
+    fs = SD.open("/apikey.json", FILE_READ);
+    if(fs) {
+      size_t sz = fs.size();
+      char buf[sz + 1];
+      fs.read((uint8_t*)buf, sz);
+      buf[sz] = 0;
+      fs.close();
+
+      StaticJsonDocument<64> apikey_json;
+      deserializeJson(apikey_json, buf);
+      const char* openai = apikey_json["OPENAI"];
+      const char* azure = apikey_json["AZURE"];
+
+      nvs_set_str(nvs_handle, "openai", openai);
+      nvs_set_str(nvs_handle, "azure", azure);
+      Serial.println(openai);
+      Serial.println(azure);
+    }
+    
+    nvs_close(nvs_handle);
+  }
+  SD.end();
+}
+
 void setup()
 {
   auto cfg = M5.config();
@@ -881,57 +1046,10 @@ void setup()
 #else
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    /// wifi
-    auto fs = SD.open("/wifi.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      int y = 0;
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d)
-          buf[x] = 0;
-        else if (!y && x > 0 && !buf[x - 1] && buf[x])
-          y = x;
-      }
-      WiFi.begin(buf, &buf[y]);
-    } else {
-       WiFi.begin();
-    }
-
-    uint32_t nvs_handle;
-    if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
-      /// radiko-premium
-      fs = SD.open("/apikey.txt", FILE_READ);
-      if(fs) {
-        size_t sz = fs.size();
-        char buf[sz + 1];
-        fs.read((uint8_t*)buf, sz);
-        buf[sz] = 0;
-        fs.close();
-        int y = 0;
-        for(int x = 0; x < sz; x++) {
-          if(buf[x] == 0x0a || buf[x] == 0x0d)
-            buf[x] = 0;
-          else if (!y && x > 0 && !buf[x - 1] && buf[x])
-            y = x;
-        }
-        nvs_set_str(nvs_handle, "openai", buf);
-        nvs_set_str(nvs_handle, "google", &buf[y]);
-        Serial.println(buf);
-        Serial.println(&buf[y]);
-      }
-      
-      nvs_close(nvs_handle);
-    }
-    SD.end();
+    read_sd_json();
   } else {
     WiFi.begin();
   }
-
   {
     uint32_t nvs_handle;
     if (ESP_OK == nvs_open("apikey", NVS_READONLY, &nvs_handle)) {
@@ -939,15 +1057,18 @@ void setup()
 
       size_t length1;
        size_t length2;
-       if(ESP_OK == nvs_get_str(nvs_handle, "openai", nullptr, &length1) && ESP_OK == nvs_get_str(nvs_handle, "google", nullptr, &length2) && length1 && length2) {
+       if(ESP_OK == nvs_get_str(nvs_handle, "openai", nullptr, &length1) &&
+          ESP_OK == nvs_get_str(nvs_handle, "azure", nullptr, &length2) &&
+          length1 && length2) {
         Serial.println("nvs_get_str");
         char openai_apikey[length1 + 1];
-        char google_apikey[length2 + 1];
-        if(ESP_OK == nvs_get_str(nvs_handle, "openai", openai_apikey, &length1) && ESP_OK == nvs_get_str(nvs_handle, "google", google_apikey, &length2)) {
+        char azure_apikey[length2 + 1];
+        if(ESP_OK == nvs_get_str(nvs_handle, "openai", openai_apikey, &length1) &&
+           ESP_OK == nvs_get_str(nvs_handle, "azure", azure_apikey, &length2)) {
           OPENAI_API_KEY = String(openai_apikey);
-          GOOGLE_API_KEY = String(google_apikey);
+          AZURE_API_KEY = String(azure_apikey);
           Serial.println(OPENAI_API_KEY);
-          Serial.println(GOOGLE_API_KEY);
+          Serial.println(AZURE_API_KEY);
         }
       }
       nvs_close(nvs_handle);
@@ -967,9 +1088,9 @@ void setup()
       size_t length1;
       if(ESP_OK == nvs_get_str(nvs_handle, "lang", nullptr, &length1) && length1) {
         Serial.println("nvs_get_str");
-        char google_lang[length1 + 1];
-        if(ESP_OK == nvs_get_str(nvs_handle, "lang", google_lang, &length1)) {
-          LANG_CODE = String(google_lang);
+        char azure_lang[length1 + 1];
+        if(ESP_OK == nvs_get_str(nvs_handle, "lang", azure_lang, &length1)) {
+          LANG_CODE = String(azure_lang);
           Serial.println(OPENAI_API_KEY);
         }
       }
@@ -1143,6 +1264,7 @@ void getExpression(String &sentence, int &expressionIndx){
 
 String separator_tbl[2][7] = {{"。","？","！","、","","　",""},{":",",",".","?","!","\n",""}};
 
+// 句読点による文の分割
 int search_separator(String text, int tbl){
   int i = 0;
   int dotIndex_min = 1000;
@@ -1165,6 +1287,38 @@ int search_separator(String text, int tbl){
 //   return -1;
 // }
 
+String text_preprocess(String keywords[]) {
+  speech_text_buffer = speech_text;
+  speech_text = "";
+  addPeriodBeforeKeyword(speech_text_buffer, keywords, 6);  // 発声テキスト前処理
+  Serial.println("-----------------------------");
+  Serial.println(speech_text_buffer);
+//---------------------------------
+  String sentence = speech_text_buffer;
+  int dotIndex;
+  if(LANG_CODE == "ja-JP") {
+    dotIndex = search_separator(speech_text_buffer, 0);
+    //dotIndex = speech_text_buffer.indexOf("。");
+  } else {
+    dotIndex = search_separator(speech_text_buffer, 1);
+    //dotIndex =speech_text_buffer.indexOf(".");
+  }
+  if (dotIndex != -1) {
+    if(LANG_CODE == "ja-JP") {
+      dotIndex += 3;
+    }else{
+      dotIndex += 2;
+    }
+    sentence = speech_text_buffer.substring(0, dotIndex);
+    Serial.println(sentence);
+    speech_text_buffer = speech_text_buffer.substring(dotIndex);
+  }else{
+    speech_text_buffer = "";
+  }
+
+  return sentence;
+}
+
 void loop()
 {
   static int lastms = 0;
@@ -1179,6 +1333,7 @@ void loop()
     }
   }
 
+  // 独り言
   if (M5.BtnA.wasPressed()&&(!mp3->isRunning()))
   {
     M5.Speaker.tone(1000, 100);
@@ -1206,9 +1361,7 @@ void loop()
     }
     random_speak = !random_speak;
     avatar.setExpression(Expression::Happy);
-//    google_tts((char*)tmp.c_str(),"ja-JP");
-//    google_tts((char*)tmp.c_str(),"en-US");
-    google_tts((char*)tmp.c_str(),(char*)lang.c_str());
+    azure_tts((char*)tmp.c_str(),(char*)lang.c_str());
     avatar.setExpression(Expression::Neutral);
     Serial.println("mp3 begin");
   }
@@ -1223,6 +1376,7 @@ void loop()
 	// }
 
   M5.update();
+
 #if defined(ARDUINO_M5STACK_Core2)
   auto count = M5.Touch.getCount();
   if (count)
@@ -1237,9 +1391,15 @@ void loop()
         bool prev_servo_home = servo_home;
         random_speak = true;
         random_time = -1;
+
 #ifdef USE_SERVO
         servo_home = true;
+
 #endif
+
+        // 会話
+
+        // 録音
         avatar.setExpression(Expression::Happy);
         if(LANG_CODE == "ja-JP") {
           avatar.setSpeechText("御用でしょうか？");
@@ -1251,9 +1411,11 @@ void loop()
         Audio* audio = new Audio();
         audio->Record();
         Serial.println("Record end\r\n");
+
+        // STT
         Serial.println("音声認識開始");
         if(LANG_CODE == "ja-JP") {
-          avatar.setSpeechText("わかりました");
+          avatar.setSpeechText("ふむふむ...");
         }else{
           avatar.setSpeechText("I understand.");
         }
@@ -1262,17 +1424,28 @@ void loop()
         delete cloudSpeechClient;
         delete audio;
         delay(500);
+
 #ifdef USE_SERVO
         servo_home = prev_servo_home;
 #endif
+
         Serial.println("音声認識終了");
         Serial.println("音声認識結果");
+
         if(ret != "") {
+
+          // 認識成功
+
           //M5.Lcd.println(ret);
           if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
-            exec_chatGPT(ret);
+
+            exec_chatGPT(ret);        // speech_textにchatgptのレスポンスを代入
+
           }
         } else {
+
+          // 認識失敗
+
           Serial.println("音声認識失敗");
           avatar.setExpression(Expression::Sad);
           if(LANG_CODE == "ja-JP") {
@@ -1303,48 +1476,27 @@ void loop()
     M5.Speaker.tone(1000, 100);
     avatar.setExpression(Expression::Happy);
     if(LANG_CODE == "ja-JP") {
-      google_tts(text1,"ja-JP");
+      azure_tts(text1,"ja-JP");
     } else {
-      google_tts(text2,"en-US");
+      azure_tts(text2,"en-US");
     }
     avatar.setExpression(Expression::Neutral);
     Serial.println("mp3 begin");
   }
 
   if(speech_text != ""){
-    speech_text_buffer = speech_text;
-    speech_text = "";
-    addPeriodBeforeKeyword(speech_text_buffer, keywords, 6);
-    Serial.println("-----------------------------");
-    Serial.println(speech_text_buffer);
-//---------------------------------
-    String sentence = speech_text_buffer;
-    int dotIndex;
-    if(LANG_CODE == "ja-JP") {
-      dotIndex = search_separator(speech_text_buffer, 0);
-      //dotIndex = speech_text_buffer.indexOf("。");
-    } else {
-      dotIndex = search_separator(speech_text_buffer, 1);
-      //dotIndex =speech_text_buffer.indexOf(".");
-    }
-    if (dotIndex != -1) {
-      if(LANG_CODE == "ja-JP") {
-        dotIndex += 3;
-      }else{
-        dotIndex += 2;
-      }
-      sentence = speech_text_buffer.substring(0, dotIndex);
-      Serial.println(sentence);
-      speech_text_buffer = speech_text_buffer.substring(dotIndex);
-    }else{
-      speech_text_buffer = "";
-    }
+
+    String sentence = text_preprocess(keywords);
+
 //----------------
     getExpression(sentence, expressionIndx);
 //----------------
+
+    // TTS
     if(expressionIndx < 0) avatar.setExpression(Expression::Happy);
-    google_tts((char*)sentence.c_str(), (char*)LANG_CODE.c_str());
+    azure_tts((char*)sentence.c_str(), (char*)LANG_CODE.c_str());
     if(expressionIndx < 0) avatar.setExpression(Expression::Neutral);
+
   }
 
   if (mp3->isRunning()) {
@@ -1384,7 +1536,7 @@ void loop()
         getExpression(sentence, expressionIndx);
 //----------------
         if(expressionIndx < 0) avatar.setExpression(Expression::Happy);
-        google_tts((char*)sentence.c_str(), (char*)LANG_CODE.c_str());
+        azure_tts((char*)sentence.c_str(), (char*)LANG_CODE.c_str());
         if(expressionIndx < 0) avatar.setExpression(Expression::Neutral);
       } else {
         avatar.setExpression(Expression::Neutral);
