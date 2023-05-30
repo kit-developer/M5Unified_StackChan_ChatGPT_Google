@@ -82,6 +82,7 @@ ESP32WebServer server(80);
 String OPENAI_API_KEY = "";
 // extern String GOOGLE_API_KEY;
 String AZURE_API_KEY = "";
+String GOOGLE_API_KEY = "";
 
 char* text1 = "みなさんこんにちは、私の名前はスタックチャンです、よろしくね。";
 char* text2 = "Hello everyone, my name is Stack Chan, nice to meet you.";
@@ -433,13 +434,13 @@ void handle_apikey_set() {
   // openai
   String openai = server.arg("openai");
   // voicetxt
-  // String google = server.arg("google");
+  String google = server.arg("google");
 
   String azure = server.arg("azure");
  
   OPENAI_API_KEY = openai;
   // tts_user = voicetext;
-  // GOOGLE_API_KEY = google;
+  GOOGLE_API_KEY = google;
   AZURE_API_KEY = azure;
   Serial.println(openai);
   // Serial.println(google);
@@ -1007,11 +1008,14 @@ void read_sd_json() {
       deserializeJson(apikey_json, buf);
       const char* openai = apikey_json["OPENAI"];
       const char* azure = apikey_json["AZURE"];
+      const char* google = apikey_json["GOOGLE"];
 
       nvs_set_str(nvs_handle, "openai", openai);
       nvs_set_str(nvs_handle, "azure", azure);
+      nvs_set_str(nvs_handle, "google", google);
       Serial.println(openai);
       Serial.println(azure);
+      Serial.println(google);
     }
     
     nvs_close(nvs_handle);
@@ -1062,19 +1066,25 @@ void setup()
       Serial.println("nvs_open");
 
       size_t length1;
-       size_t length2;
-       if(ESP_OK == nvs_get_str(nvs_handle, "openai", nullptr, &length1) &&
-          ESP_OK == nvs_get_str(nvs_handle, "azure", nullptr, &length2) &&
-          length1 && length2) {
+      size_t length2;
+      size_t length3;
+      if(ESP_OK == nvs_get_str(nvs_handle, "openai", nullptr, &length1) &&
+         ESP_OK == nvs_get_str(nvs_handle, "azure", nullptr, &length2) &&
+         ESP_OK == nvs_get_str(nvs_handle, "google", nullptr, &length3) &&
+        length1 && length2) {
         Serial.println("nvs_get_str");
         char openai_apikey[length1 + 1];
         char azure_apikey[length2 + 1];
+        char google_apikey[length3 + 1];
         if(ESP_OK == nvs_get_str(nvs_handle, "openai", openai_apikey, &length1) &&
-           ESP_OK == nvs_get_str(nvs_handle, "azure", azure_apikey, &length2)) {
+           ESP_OK == nvs_get_str(nvs_handle, "azure", azure_apikey, &length2) &&
+           ESP_OK == nvs_get_str(nvs_handle, "google", azure_apikey, &length3)) {
           OPENAI_API_KEY = String(openai_apikey);
           AZURE_API_KEY = String(azure_apikey);
+          GOOGLE_API_KEY = String(google_apikey);
           Serial.println(OPENAI_API_KEY);
           Serial.println(AZURE_API_KEY);
+          Serial.println(GOOGLE_API_KEY);
         }
       }
       nvs_close(nvs_handle);
@@ -1428,7 +1438,8 @@ void loop()
 
         CloudSpeechClient* cloudSpeechClient = new CloudSpeechClient(USE_APIKEY);
         Serial.println("オブジェクト生成完了");
-        String ret = cloudSpeechClient->Transcribe(audio, AZURE_API_KEY);
+        // String ret = cloudSpeechClient->Transcribe(audio, AZURE_API_KEY);
+        String ret = cloudSpeechClient->Transcribe(audio, GOOGLE_API_KEY);
         delete cloudSpeechClient;
 
         Serial.println("認識終了");

@@ -16,7 +16,7 @@ class CloudSpeechClient {
 public:
   CloudSpeechClient(Authentication authentication);
   ~CloudSpeechClient();
-  String Transcribe(Audio* audio);
+  String Transcribe(Audio* audio, String api_key);
 };
 
 #endif // _CLOUDSPEECHCLIENT_H
