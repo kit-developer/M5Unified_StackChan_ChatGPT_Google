@@ -80,8 +80,7 @@ const Expression expressions_table[] = {
 ESP32WebServer server(80);
 
 String OPENAI_API_KEY = "";
-// extern String GOOGLE_API_KEY;
-String AZURE_API_KEY = "";
+extern String AZURE_API_KEY;
 String GOOGLE_API_KEY = "";
 
 char* text1 = "みなさんこんにちは、私の名前はスタックチャンです、よろしくね。";
@@ -1439,7 +1438,7 @@ void loop()
         CloudSpeechClient* cloudSpeechClient = new CloudSpeechClient(USE_APIKEY);
         Serial.println("オブジェクト生成完了");
         // String ret = cloudSpeechClient->Transcribe(audio, AZURE_API_KEY);
-        String ret = cloudSpeechClient->Transcribe(audio, GOOGLE_API_KEY);
+        String ret = cloudSpeechClient->Transcribe(audio);
         delete cloudSpeechClient;
 
         Serial.println("認識終了");

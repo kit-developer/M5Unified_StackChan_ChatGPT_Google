@@ -1,7 +1,7 @@
 #ifndef _NETWORK_PARAM_H
 #define _NETWORK_PARAM_H
 
-const char*  server_stt = "speech.googleapis.com";
+const char*  server_stt = "https://japaneast.stt.speech.microsoft.com";
 
 // To get the certificate for your region run:
 // openssl s_client -showcerts -connect speech.googleapis.com:443
@@ -54,7 +54,7 @@ const String AccessToken = "";
 
 // It is also possible to use "API Key" instead of "Access Token". It doesn't have time limit.
 //const String ApiKey = "";
-String GOOGLE_API_KEY = "";
+String AZURE_API_KEY = "";
 extern String LANG_CODE;
 
 // see https://cloud.google.com/docs/authentication?hl=ja#getting_credentials_for_server-centric_flow
