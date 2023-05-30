@@ -28,7 +28,7 @@ void CloudSpeechClient::PrintHttpBody2(Audio* audio) {
 //  Serial.printf("PrintHttpBody2=%d",len);
 }
 
-String CloudSpeechClient::Transcribe(Audio* audio, String api_key) {
+String CloudSpeechClient::Transcribe(Audio* audio) {
   String HttpBody1 = "{\"config\":{\"encoding\":\"LINEAR16\",\"sampleRateHertz\":16000,\"languageCode\":\""+LANG_CODE+"\"},\"audio\":{\"content\":\"";
   String HttpBody3 = "\"}}\r\n\r\n";
   int httpBody2Length = (audio->wavDataSize + sizeof(audio->paddedHeader))*4/3;  // 4/3 is from base64 encoding
@@ -36,7 +36,7 @@ String CloudSpeechClient::Transcribe(Audio* audio, String api_key) {
 //  Serial.printf("HttpBody1=%d httpBody2Length=%d HttpBody3=%d \n",HttpBody1.length(),httpBody2Length,HttpBody3.length());
   String HttpHeader;
   if (authentication == USE_APIKEY) 
-    HttpHeader = String("POST /v1/speech:recognize?key=") + api_key
+    HttpHeader = String("POST /v1/speech:recognize?key=") + GOOGLE_API_KEY
     + String(" HTTP/1.1\r\nHost: speech.googleapis.com\r\nContent-Type: application/json\r\nContent-Length: ") + ContentLength + String("\r\n\r\n");
   else if (authentication == USE_ACCESSTOKEN)
     HttpHeader = String("POST /v1/speech:recognize HTTP/1.1\r\nHost: speech.googleapis.com\r\nContent-Type: application/json\r\nAuthorization: Bearer ")
